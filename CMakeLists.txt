@@ -3,4 +3,4 @@ project(echo C)
 
 set(CMAKE_C_STANDARD 99)
 
-add_executable(echo main.c)
+add_executable(echo server.c)
