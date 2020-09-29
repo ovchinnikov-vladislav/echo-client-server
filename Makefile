@@ -18,10 +18,18 @@ mkd: clear
 	mkdir $(BUILD_DIR)
 	mkdir $(BIN_DIR)
 
-build_server: mkd
-	$(CC) $(SERVER_C) -o $(SERVER_O)
+compile_server: mkd
+	$(CC) $(SERVER_C) -c -o $(SERVER_O)
 
-build_client: mkd
-	$(CC) $(CLIENT_C) -o $(CLIENT_O)
+compile_client: mkd
+	$(CC) $(CLIENT_C) -c -o $(CLIENT_O)
 
-build_all: build_server build_client
+compile_all: compile_server compile_client
+
+link_server: compile_server
+	$(CC) -o $(BIN_DIR)/server.bin $(SERVER_O)
+
+link_client: compile_client
+	$(CC) -o $(BIN_DIR)/client.bin $(CLIENT_O)
+
+link_all: link_server link_client
