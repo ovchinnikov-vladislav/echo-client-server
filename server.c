@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
     printf("Start Echo Server\n");
 
-    unsigned int port = 8080;
+    unsigned int port = 8081;
 
     if (argc < 2) {
         printf("PORT: 8080\n");
@@ -35,14 +35,14 @@ int main(int argc, char **argv) {
     }
 
     int execute = TRUE;
+    char *buffer = (char*) malloc(500);
     while (execute) {
         int client_socket = get_client_socket(server_socket);
         send_message(client_socket, "Hello!\n");
         send_message(client_socket, "This is Echo Server.\n");
-        unsigned int receive = FALSE;
-        do {
+        unsigned int receive = TRUE;
+        while(receive) {
             send_message(client_socket, "-> ");
-            char *buffer = (char*) malloc(500);
             receive = receive_line(client_socket, buffer);
 
             printf("RECEIVE: %s\n", buffer);
@@ -54,16 +54,18 @@ int main(int argc, char **argv) {
             if (strncmp(buffer, "disc", 4) == 0) {
                 receive = FALSE;
             }
-            buffer = strcat(buffer, "\n");
+
             char *output = (char*) malloc(strlen(buffer) + 10);
+
+            buffer = strcat(buffer, "\n");
             output = strcpy(output, "ECHO: ");
             send_message(client_socket, strcat(output, buffer));
-            free(buffer);
             free(output);
-        } while (receive && execute);
+        }
         shutdown(client_socket, SHUT_RDWR);
         close(client_socket);
     }
+    free(buffer);
 
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
@@ -135,6 +137,10 @@ unsigned int receive_line(int socket_d, char *dist_buffer) {
     while (recv(socket_d, ptr, 1, 0) != -1) {
         count_size++;
 
+        if (*ptr == '\0') {
+            return 0;
+        }
+
         if (*ptr == '\n' || *ptr == '\r') {
             end_chars_count++;
             if (end_chars_count == 2) {
@@ -151,5 +157,5 @@ unsigned int receive_line(int socket_d, char *dist_buffer) {
             dist_buffer = realloc(dist_buffer, start_size);
         }
     }
-    return 0;
+    return -1;
 }

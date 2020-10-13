@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
     char *ip = (char *) malloc(20);
     strcpy(ip, "127.0.0.1");
-    unsigned int port = 8080;
+    unsigned int port = 8081;
 
     if (argc < 2) {
         printf("SERVER ADDRESS: 127.0.0.1:8080\n");
@@ -35,14 +35,14 @@ int main(int argc, char **argv) {
         exit(-1);
     }
 
-    struct timeval timeout;
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 1;
-
-    if (setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*) &timeout, sizeof(timeout)) == -1) {
-        perror("ERROR: timeout recv");
-        exit(-1);
-    }
+//    struct timeval timeout;
+//    timeout.tv_sec = 0;
+//    timeout.tv_usec = 1;
+//
+//    if (setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*) &timeout, sizeof(timeout)) == -1) {
+//        perror("ERROR: timeout recv");
+//        exit(-1);
+//    }
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = PF_INET;
@@ -58,19 +58,22 @@ int main(int argc, char **argv) {
     }
 
     int is_execute = TRUE;
+    char *buffer = (char *) malloc(1000);
+    char *input = (char *) malloc(1000);
     while (is_execute) {
-        char *buffer = (char *) malloc(1000);
+        memset(buffer, '\0', 1000);
+        memset(input, '\0', 1000);
         receive_line(server_socket, buffer);
         printf("%s", buffer);
-        char *input = (char *) malloc(1000);
         gets(input);
 
         if (strncmp(input, "quit", 4) == 0) {
             is_execute = FALSE;
         }
         send_message(server_socket, strcat(input, "\n\r"));
-        free(input);
     }
+    free(input);
+    free(buffer);
 
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
