@@ -10,11 +10,18 @@
 #define FALSE 0
 
 int get_server_socket(unsigned int port);
-int get_client_socket(int socket_d);
+int get_client_socket(int socket_d, char* client_address[1024]);
 unsigned int send_message(int socket_d, char *message);
 unsigned int receive_line(int socket_d, char *dist_buffer);
 
 int main(int argc, char **argv) {
+
+    fd_set master;
+    fd_set read_fds;
+    int fdmax;
+
+    FD_ZERO(&master);
+    FD_ZERO(&read_fds);
 
     printf("Start Echo Server\n");
 
@@ -34,36 +41,59 @@ int main(int argc, char **argv) {
         exit(-1);
     }
 
+    FD_SET(server_socket, &master);
+
+    fdmax = server_socket;
+
+    char* clients_address[1024];
+
     int execute = TRUE;
     char *buffer = (char*) malloc(500);
     while (execute) {
-        int client_socket = get_client_socket(server_socket);
-        send_message(client_socket, "Hello!\n");
-        send_message(client_socket, "This is Echo Server.\n");
-        unsigned int receive = TRUE;
-        while(receive) {
-            send_message(client_socket, "-> ");
-            receive = receive_line(client_socket, buffer);
+        read_fds = master;
 
-            printf("RECEIVE: %s\n", buffer);
-
-            if (strncmp(buffer, "quit", 4) == 0) {
-                execute = FALSE;
-            }
-
-            if (strncmp(buffer, "disc", 4) == 0) {
-                receive = FALSE;
-            }
-
-            char *output = (char*) malloc(strlen(buffer) + 10);
-
-            buffer = strcat(buffer, "\n");
-            output = strcpy(output, "ECHO: ");
-            send_message(client_socket, strcat(output, buffer));
-            free(output);
+        if (pselect(fdmax + 1, &read_fds, NULL, NULL, NULL, NULL) == -1) {
+            perror("pselect");
+            exit(-1);
         }
-        shutdown(client_socket, SHUT_RDWR);
-        close(client_socket);
+
+        for (int i = 0; i <= fdmax; i++) {
+            if (FD_ISSET(i, &read_fds)) {
+                if (i == server_socket) {
+                    int client_socket = get_client_socket(server_socket, clients_address);
+                    printf("NEW CONNECT: %s\n", clients_address[client_socket]);
+
+                    send_message(client_socket, "Hello!\n");
+                    send_message(client_socket, "This is Echo Server.\n");
+                    send_message(client_socket, "-> ");
+
+                    FD_SET(client_socket, &master);
+
+                    if (client_socket > fdmax) {
+                        fdmax = client_socket;
+                    }
+                } else {
+                    int bytes = receive_line(i, buffer);
+                    if (bytes == -128128) {
+                        printf("RECEIVE FROM %s: %s\n", clients_address[i], buffer);
+                        char *result = (char*) malloc(strlen(buffer) + 10);
+                        sprintf(result, "ECHO: %s\n-> ", buffer);
+                        send_message(i, result);
+                    } else if (bytes <= 0) {
+                        if (bytes == 0) {
+                            printf("close");
+                        } else {
+                            perror("recv");
+                        }
+                        shutdown(i, SHUT_RDWR);
+                        close(i);
+                        free(clients_address[i]);
+                        FD_CLR(i, &master);
+                    }
+                }
+            }
+        }
+
     }
     free(buffer);
 
@@ -100,7 +130,7 @@ int get_server_socket(unsigned int port) {
     return socket_d;
 }
 
-int get_client_socket(int socket_d) {
+int get_client_socket(int socket_d, char* client_address[1024]) {
     struct sockaddr_in client_addr;
     socklen_t s_len = sizeof(struct sockaddr);
     int client_socket = accept(socket_d, (struct sockaddr*) &client_addr, &s_len);
@@ -109,7 +139,8 @@ int get_client_socket(int socket_d) {
         exit(-1);
     }
 
-    printf("NEW CONNECT: %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+    client_address[client_socket] = (char*) malloc(10);
+    sprintf(client_address[client_socket], "%s:%d", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
 
     return client_socket;
 }
@@ -134,18 +165,19 @@ unsigned int receive_line(int socket_d, char *dist_buffer) {
     char *ptr = dist_buffer;
     unsigned int start_size = sizeof(dist_buffer);
     int count_size = 0;
-    while (recv(socket_d, ptr, 1, 0) != -1) {
+    int bytes;
+    while ((bytes = recv(socket_d, ptr, 1, 0)) > 0) {
         count_size++;
 
         if (*ptr == '\0') {
-            return 0;
+            return bytes;
         }
 
         if (*ptr == '\n' || *ptr == '\r') {
             end_chars_count++;
             if (end_chars_count == 2) {
                 *(ptr - 1) = '\0';
-                return strlen(dist_buffer) + 2;
+                return -128128;
             }
         } else {
             end_chars_count = 0;
@@ -157,5 +189,5 @@ unsigned int receive_line(int socket_d, char *dist_buffer) {
             dist_buffer = realloc(dist_buffer, start_size);
         }
     }
-    return -1;
+    return bytes;
 }
