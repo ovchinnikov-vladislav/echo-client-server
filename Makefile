@@ -22,7 +22,7 @@ compile_server: mkd
 	$(CC) $(SERVER_C) -c -o $(SERVER_O)
 
 compile_client: mkd
-	$(CC) $(CLIENT_C) -c -o $(CLIENT_O)
+	$(CC) $(CLIENT_C) -c  -o $(CLIENT_O)
 
 compile_all: compile_server compile_client
 
@@ -30,6 +30,6 @@ link_server: compile_server
 	$(CC) -o $(BIN_DIR)/server.bin $(SERVER_O)
 
 link_client: compile_client
-	$(CC) -o $(BIN_DIR)/client.bin $(CLIENT_O)
+	$(CC) -o $(BIN_DIR)/client.bin $(CLIENT_O) -lpthread
 
 link_all: link_server link_client

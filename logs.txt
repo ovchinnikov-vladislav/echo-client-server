@@ -1,0 +1,8 @@
+Hello!
+This is Echo Server.
+ECHO: send
+ECHO: data
+ECHO: hello
+Hello!
+This is Echo Server.
+ECHO: this_words_for_all_servers_must_two_second_message

@@ -9,6 +9,8 @@
 #define TRUE 1
 #define FALSE 0
 
+// TODO: Исправить баг с памятью
+
 int get_server_socket(unsigned int port);
 int get_client_socket(int socket_d, char* client_address[1024]);
 unsigned int send_message(int socket_d, char *message);
@@ -16,86 +18,89 @@ unsigned int receive_line(int socket_d, char *dist_buffer);
 
 int main(int argc, char **argv) {
 
-    fd_set master;
-    fd_set read_fds;
-    int fdmax;
+    fd_set master;      // главный сет дескрипторов
+    fd_set read_fds;    // временный сет для pselect()
+    int fdmax;          // максимальное число дескрипторов в определенный момент времени
 
-    FD_ZERO(&master);
+    FD_ZERO(&master);   // обнуляем сеты
     FD_ZERO(&read_fds);
 
     printf("Start Echo Server\n");
 
-    unsigned int port = 8081;
+    unsigned int port = 8080;
 
     if (argc < 2) {
-        printf("PORT: 8080\n");
+        printf("PORT: %u\n", port);
     } else {
         port = atoi(argv[1]);
-        printf("PORT: %u", port);
+        printf("PORT: %u\n", port);
     }
 
-    int server_socket = get_server_socket(port);
+    int server_socket = get_server_socket(port);    // сокет сервера
 
     if (listen(server_socket, 5) == -1) {
         perror("ERROR: listen()");
         exit(-1);
     }
 
-    FD_SET(server_socket, &master);
+    FD_SET(server_socket, &master);         // добавляем в главный сет сокет сервера
 
-    fdmax = server_socket;
+    fdmax = server_socket;                        // максимальное количество дескрипторов равно номеру дескриптора сокета сервера
 
     char* clients_address[1024];
 
     int execute = TRUE;
-    char *buffer = (char*) malloc(500);
     while (execute) {
         read_fds = master;
 
+        // стартуем вызов pselect()
         if (pselect(fdmax + 1, &read_fds, NULL, NULL, NULL, NULL) == -1) {
             perror("pselect");
             exit(-1);
         }
 
+        // проходим через существующие соединения, ищем данные для чтения
         for (int i = 0; i <= fdmax; i++) {
-            if (FD_ISSET(i, &read_fds)) {
-                if (i == server_socket) {
+            if (FD_ISSET(i, &read_fds)) {    // есть какие-то данные от сокетов
+                if (i == server_socket) {          // если это server, то обрабатываем новые подключения
                     int client_socket = get_client_socket(server_socket, clients_address);
                     printf("NEW CONNECT: %s\n", clients_address[client_socket]);
 
                     send_message(client_socket, "Hello!\n");
                     send_message(client_socket, "This is Echo Server.\n");
-                    send_message(client_socket, "-> ");
 
                     FD_SET(client_socket, &master);
 
                     if (client_socket > fdmax) {
                         fdmax = client_socket;
                     }
-                } else {
+                } else {   // если это клиент, то общаемся с клиентом (принимаем данные и отдаем эхо-ответ)
+                    char *buffer = (char*) malloc(10000);
                     int bytes = receive_line(i, buffer);
                     if (bytes == -128128) {
                         printf("RECEIVE FROM %s: %s\n", clients_address[i], buffer);
-                        char *result = (char*) malloc(strlen(buffer) + 10);
-                        sprintf(result, "ECHO: %s\n-> ", buffer);
+                        char *result = (char*) malloc(10000);
+                        sprintf(result, "ECHO: %s\n", buffer);
                         send_message(i, result);
+                        free(result);
                     } else if (bytes <= 0) {
-                        if (bytes == 0) {
-                            printf("close");
-                        } else {
-                            perror("recv");
+                        if (bytes == 0) {   // если вернулся код закрытия соединения
+                            printf("CLOSE %s\n", clients_address[i]);
+                        } else {            // или ошибки
+                            perror("error receive\n");
                         }
+                        // закрываем соединение
                         shutdown(i, SHUT_RDWR);
                         close(i);
                         free(clients_address[i]);
-                        FD_CLR(i, &master);
+                        FD_CLR(i, &master); // удаляем клиент из главного сета.
                     }
+                    free(buffer);
                 }
             }
         }
 
     }
-    free(buffer);
 
     shutdown(server_socket, SHUT_RDWR);
     close(server_socket);
@@ -175,14 +180,13 @@ unsigned int receive_line(int socket_d, char *dist_buffer) {
 
         if (*ptr == '\n' || *ptr == '\r') {
             end_chars_count++;
-            if (end_chars_count == 2) {
-                *(ptr - 1) = '\0';
-                return -128128;
-            }
-        } else {
-            end_chars_count = 0;
         }
         ptr++;
+
+        if (end_chars_count == 2) {
+            *(ptr - 2) = '\0';
+            return -128128;
+        }
 
         if (count_size == start_size - 2) {
             start_size += (start_size / 2);
